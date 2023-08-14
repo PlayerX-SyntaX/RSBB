@@ -1,0 +1,47 @@
+#!/bin/bash
+#@> COLORS
+BK="\e[7m"
+RT="\e[0m"
+YW="\e[93m"
+GR="\e[32m"
+
+echo -e "[${YW}RSBB${RT}] == A RECONNAISSANCE SUITE BUG BOUNTY (${GR}@Sylncereyes${RT})"
+OT=$(echo -e "$(echo $1| sed -e 's/\.[a-z]*$//')_$(date +"%Y_%M_%d-%H_%M_%S")")
+mkdir -p $OT 2> /dev/null
+cd $OT
+echo -e ""
+echo -e "${GR}DOMAIN >> ${RT}" | tr -d "\n"; echo -e " $1" | pv -qL 6
+echo -e "${GR}OUTPUT >> ${RT}" | tr -d "\n"; echo -e " $(pwd | sed 's/\// < /g' | cut -c 4-)" | pv -qL 6
+echo -e "[RSBB] - Scanning started on $1 at $(date)"
+
+sleep 2
+echo ""
+echo -e "        " | tr -d '\n' | pv -qL 4; echo -e "${GR} STARTING SUBDOMAINS SCANNING ON $1${RT} (${YW}it may take time${RT})"
+curl -s "https://crt.sh/?q=%25.$1&output=json" | jq -r '.[].name_value' 2>/dev/null | sed 's/\*\.//g' | sort -u | grep -o "\w.*$1" | anew -q cert.list
+curl -s "https://api.hackertarget.com/hostsearch/?q=$1" | grep -o "\w.*$1" | anew -q htarget.list
+curl -s "https://riddler.io/search/exportcsv?q=pld:$1" | grep -Po "(([\w.-]*)\.([\w]*)\.([A-z]))\w+" | grep -o "\w.*$1" | anew -q riddler.list
+assetfinder --subs-only $1 | anew -q assetfinder.list
+sublist3r -d $1 -o sublister.list &> /dev/null
+cat *.list | anew domains.txt
+rm -rf *.list
+
+sleep 2
+echo ""
+echo -e "        " | tr -d '\n' | pv -qL 4; echo -e "${GR} STARTING PORTS SCANNING ON $1${RT} (${YW}it may take time${RT})"
+cat domains.txt | dnsx -silent -a -resp | anew dns.txt
+cat domains.txt | dnsx -silent -a -resp | cut -d ' ' -f 1 | anew domains.txt
+mkdir tmp
+cat dns.txt | grep -oE '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' | naabu -silent -c 25 | anew tmp/ip-ports.txt
+cat domains.txt | naabu -silent -c 25 | anew tmp/dom-ports.txt
+cat tmp/ip-ports.txt | httpx -silent -td -content-length -sc -fhr -o tmp/ip-info.txt
+cat tmp/dom-ports.txt | httpx -silent -td -content-length -sc -fhr -o tmp/dom-info.txt
+
+sleep 2
+echo ""
+echo -e "        " | tr -d '\n' | pv -qL 4; echo -e "${GR} STARTING PROBE SCANNING ON $1${RT} (${YW}it may take time${RT})"
+cat tmp/ip-ports.txt | httpx -silent -mc 200 -o tmp/ip-probe.txt
+cat tmp/dom-ports.txt | httpx -silent -sc -fhr -o urls.txt
+sleep 2
+echo ""
+echo -e "${GR} SCANNING COMPLETED SUCCESSFULLY ON $1 ${RT}"
+echo -e "[RSBB] - Scanning completed on $1 at $(date)"
